@@ -80,11 +80,11 @@ function checkSystem()
 }
 
 status() {
-    trojan_cmd="$(command -v trojan)"
-    if [[ "$trojan_cmd" = "" ]]; then
+    if [[ ! -f /usr/local/bin/trojan ]]; then
         echo 0
         return
     fi
+
     if [[ ! -f $CONFIG_FILE ]]; then
         echo 1
         return
@@ -392,7 +392,7 @@ EOF
 getCert() {
     mkdir -p /usr/local/etc/trojan
     if [[ -z ${CERT_FILE+x} ]]; then
-        systemctl stop nginx
+        stopNginx
         res=`netstat -ntlp| grep -E ':80 |:443 '`
         if [[ "${res}" != "" ]]; then
             colorEcho $RED " 其他进程占用了80或443端口，请先关闭再运行一键脚本"
@@ -414,7 +414,15 @@ getCert() {
         curl -sL https://get.acme.sh | sh
         source ~/.bashrc
         ~/.acme.sh/acme.sh  --upgrade  --auto-upgrade
-        ~/.acme.sh/acme.sh   --issue -d $DOMAIN --pre-hook "systemctl stop nginx" --post-hook "systemctl restart nginx"  --standalone
+        if [[ "$BT" = "false" ]]; then
+            ~/.acme.sh/acme.sh   --issue -d $DOMAIN --pre-hook "systemctl stop nginx" --post-hook "systemctl restart nginx"  --standalone
+        else
+            ~/.acme.sh/acme.sh   --issue -d $DOMAIN --pre-hook "nginx -s stop || { echo -n ''; }" --post-hook "nginx -c /www/server/nginx/conf/nginx.conf || { echo -n ''; }"  --standalone
+        fi
+        [[ -f ~/.acme.sh/$DOMAIN/ca.cer ]] || {
+            colorEcho $RED " 获取证书失败，请复制上面的红色文字到 https://hijk.art 反馈"
+            exit 1
+        }
         CERT_FILE="/usr/local/etc/trojan/${DOMAIN}.pem"
         KEY_FILE="/usr/local/etc/trojan/${DOMAIN}.key"
         ~/.acme.sh/acme.sh  --install-cert -d $DOMAIN \
@@ -794,6 +802,12 @@ showLog() {
 }
 
 function uninstall() {
+    res=`status`
+    if [[ $res -lt 2 ]]; then
+        echo -e "${RED}trojan未安装，请先安装！${PLAIN}"
+        return
+    fi
+
     echo ""
     read -p " 确定卸载trojan？(y/n)" answer
     [[ -z ${answer} ]] && answer="n"
@@ -897,4 +911,14 @@ menu() {
 
 checkSystem
 
-menu
+action=$1
+[[ -z $1 ]] && action=menu
+case "$action" in
+    menu|install|update|uninstall|start|restart|stop|showInfo|showLog)
+        ${action}
+        ;;
+    *)
+        echo " 参数错误"
+        echo " 用法: `basename $0` [menu|install|update|uninstall|start|restart|stop|showInfo|showLog]"
+        ;;
+esac

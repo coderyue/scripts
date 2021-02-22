@@ -296,6 +296,10 @@ getCert() {
         source ~/.bashrc
         ~/.acme.sh/acme.sh  --upgrade  --auto-upgrade
         ~/.acme.sh/acme.sh   --issue -d $DOMAIN --pre-hook "systemctl stop nginx" --post-hook "systemctl restart nginx"  --standalone
+        [[ -f ~/.acme.sh/$DOMAIN/ca.cer ]] || {
+            colorEcho $RED " 获取证书失败，请复制上面的红色文字到 https://hijk.art 反馈"
+            exit 1
+        }
         CERT_FILE="/etc/v2ray/${DOMAIN}.pem"
         KEY_FILE="/etc/v2ray/${DOMAIN}.key"
         ~/.acme.sh/acme.sh  --install-cert -d $DOMAIN \
@@ -314,6 +318,11 @@ getCert() {
 
 installNginx() {
     apt install -y nginx
+    res=$(command -v nginx)
+    if [[ "$res" = "" ]]; then
+        colorEcho $RED " Nginx安装失败，请到 https://hijk.art 反馈"
+        exit 1
+    fi
     
     getCert
 
@@ -369,7 +378,7 @@ http {
 }
 EOF
 
-    mkdir -p /etc/nginx/conf.d;
+    mkdir -p /etc/nginx/conf.d
     cat > /etc/nginx/conf.d/${DOMAIN}.conf<<-EOF
 server {
     listen 80;
@@ -418,9 +427,7 @@ server {
     }
 }
 EOF
-    sed -i '/certbot/d' /etc/crontab
-    certbotpath=`which certbot`
-    echo "0 3 1 */2 0 root systemctl stop nginx; ${certbotpath} renew; systemctl restart nginx" >> /etc/crontab
+
     systemctl enable nginx && systemctl restart nginx
     systemctl start v2ray
     sleep 3
@@ -520,7 +527,7 @@ info() {
     echo -e " ${BLUE}v2ray运行状态：${PLAIN}${v2status}"
     echo -e " ${BLUE}v2ray配置文件：${PLAIN}${RED}$CONFIG_FILE${PLAIN}"
     echo -e " ${BLUE}nginx运行状态：${PLAIN}${ngstatus}"
-    echo -e " ${BLUE}nginx配置文件：${PLAIN}${RED}${confpath}${domain}.conf${PLAIN}"
+    echo -e " ${BLUE}nginx配置文件：${PLAIN}${RED}/etc/nginx/conf.d/${domain}.conf${PLAIN}"
     echo ""
     echo -e " ${RED}v2ray配置信息：${PLAIN}               "
     echo -e "  ${BLUE}IP(address):${PLAIN}  ${RED}${IP}${PLAIN}"

@@ -1,5 +1,5 @@
 #!/bin/bash
-# MTProto一键安装脚本
+# trojan-go一键安装脚本
 # Author: hijk<https://hijk.art>
 
 
@@ -406,7 +406,15 @@ getCert() {
         curl -sL https://get.acme.sh | sh
         source ~/.bashrc
         ~/.acme.sh/acme.sh  --upgrade  --auto-upgrade
-        ~/.acme.sh/acme.sh   --issue -d $DOMAIN --pre-hook "systemctl stop nginx" --post-hook "systemctl restart nginx"  --standalone
+        if [[ "$BT" = "false" ]]; then
+            ~/.acme.sh/acme.sh   --issue -d $DOMAIN --pre-hook "systemctl stop nginx" --post-hook "systemctl restart nginx"  --standalone
+        else
+            ~/.acme.sh/acme.sh   --issue -d $DOMAIN --pre-hook "nginx -s stop || { echo -n ''; }" --post-hook "nginx -c /www/server/nginx/conf/nginx.conf || { echo -n ''; }"  --standalone
+        fi
+        [[ -f ~/.acme.sh/$DOMAIN/ca.cer ]] || {
+            colorEcho $RED " 获取证书失败，请复制上面的红色文字到 https://hijk.art 反馈"
+            exit 1
+        }
         CERT_FILE="/etc/trojan-go/${DOMAIN}.pem"
         KEY_FILE="/etc/trojan-go/${DOMAIN}.key"
         ~/.acme.sh/acme.sh  --install-cert -d $DOMAIN \
@@ -757,6 +765,12 @@ update() {
 }
 
 uninstall() {
+    res=`status`
+    if [[ $res -lt 2 ]]; then
+        echo -e " ${RED}trojan-go未安装，请先安装！${PLAIN}"
+        return
+    fi
+
     echo ""
     read -p " 确定卸载trojan-go？[y/n]：" answer
     if [[ "${answer,,}" = "y" ]]; then
@@ -966,4 +980,14 @@ menu() {
 
 checkSystem
 
-menu
+action=$1
+[[ -z $1 ]] && action=menu
+case "$action" in
+    menu|update|uninstall|start|restart|stop|showInfo|showLog)
+        ${action}
+        ;;
+    *)
+        echo " 参数错误"
+        echo " 用法: `basename $0` [menu|update|uninstall|start|restart|stop|showInfo|showLog]"
+        ;;
+esac
